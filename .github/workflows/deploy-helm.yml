@@ -37,45 +37,59 @@ jobs:
 
       # OIDC token exchange: no long-lived AWS credentials stored in GitHub Secrets.
       # GitHub mints a short-lived OIDC JWT; AWS validates it against the trust policy
-      # on the github-oidc-eks-deploy IAM role, then issues temporary credentials.
+      # on the github-oidc-eks-deploy IAM role (terraform/live/staging/github-oidc/),
+      # then issues temporary credentials valid for 1 hour.
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-oidc-eks-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update kubeconfig for EKS
-        run: |
-          aws eks update-kubeconfig \
-            --name "${{ env.EKS_CLUSTER }}" \
-            --region "${{ env.AWS_REGION }}"
+      # Verify the OIDC role assumption succeeded and show which identity is active.
+      # This step proves the trust chain works independently of any Kubernetes cluster.
+      - name: Verify AWS identity (OIDC proof)
+        run: aws sts get-caller-identity
 
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
           version: "3.14.0"
 
-      # Show the rendered templates before applying — useful for PR review
-      - name: Render helm templates (dry-run review)
+      # Render all templates and print to stdout — validates chart syntax and values
+      # without requiring a cluster. Useful for PR review.
+      - name: Render helm templates (dry-run)
         run: |
           helm template "${{ env.RELEASE_NAME }}" "${{ env.CHART_PATH }}" \
             --values "${{ env.VALUES_FILE }}" \
             --set image.tag="${{ github.event.inputs.image_tag || 'stable-alpine' }}" \
             --namespace "${{ env.NAMESPACE }}"
 
-      - name: Deploy with helm upgrade --install
-        run: |
-          helm upgrade --install "${{ env.RELEASE_NAME }}" "${{ env.CHART_PATH }}" \
-            --values "${{ env.VALUES_FILE }}" \
-            --set image.tag="${{ github.event.inputs.image_tag || 'stable-alpine' }}" \
-            --namespace "${{ env.NAMESPACE }}" \
-            --create-namespace \
-            --atomic \
-            --timeout 5m \
-            --wait
+      # ── EKS deploy steps ────────────────────────────────────────────────────────
+      # The steps below require a live EKS cluster. They are commented out pending
+      # resolution of an AWS new-account EC2 hold (EKS nodes run on EC2).
+      # To re-enable: uncomment these steps and ensure the staging-cluster exists.
+      # The IAM role already has eks:DescribeCluster + eks:AccessKubernetesApi.
+      # ────────────────────────────────────────────────────────────────────────────
 
-      - name: Verify rollout
-        run: |
-          kubectl rollout status deployment/"${{ env.RELEASE_NAME }}" \
-            --namespace "${{ env.NAMESPACE }}" \
-            --timeout=5m
+      # - name: Update kubeconfig for EKS
+      #   run: |
+      #     aws eks update-kubeconfig \
+      #       --name "${{ env.EKS_CLUSTER }}" \
+      #       --region "${{ env.AWS_REGION }}"
+
+      # - name: Deploy with helm upgrade --install
+      #   run: |
+      #     helm upgrade --install "${{ env.RELEASE_NAME }}" "${{ env.CHART_PATH }}" \
+      #       --values "${{ env.VALUES_FILE }}" \
+      #       --set image.tag="${{ github.event.inputs.image_tag || 'stable-alpine' }}" \
+      #       --namespace "${{ env.NAMESPACE }}" \
+      #       --create-namespace \
+      #       --atomic \
+      #       --timeout 5m \
+      #       --wait
+
+      # - name: Verify rollout
+      #   run: |
+      #     kubectl rollout status deployment/"${{ env.RELEASE_NAME }}" \
+      #       --namespace "${{ env.NAMESPACE }}" \
+      #       --timeout=5m
