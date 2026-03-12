@@ -53,7 +53,8 @@ roadpass-exam/
 │       └── staging/
 │           ├── vpc/               # Staging VPC deployment
 │           ├── ec2-app/           # ASG + ALB + IAM stack
-│           └── billing-alarm/     # CloudWatch billing alert
+│           ├── billing-alarm/     # CloudWatch billing alert
+│           └── github-oidc/       # GitHub Actions OIDC provider + IAM role
 ├── packer/
 │   ├── nginx-ami.pkr.hcl          # Packer HCL2 build template
 │   └── ansible/
@@ -81,7 +82,8 @@ roadpass-exam/
 | AWS CLI | >= 2.x |
 
 AWS credentials must be configured with permission to create VPCs, EC2 resources, IAM roles, and CloudWatch alarms.
-An admin user called roadpass-exam-admin was created as using root credentials is frowned upon.
+An admin user called `roadpass-exam-admin` was created — using root credentials for day-to-day operations is an anti-pattern.
+
 ---
 
 ## Deploy Order
@@ -98,7 +100,7 @@ terraform output tfstate_bucket_name
 terraform output aws_account_id
 ```
 
-Update `terraform/live/terragrunt.hcl` with the actual bucket name and account ID from the outputs.
+The bucket name is already set in `terraform/live/terragrunt.hcl` (`roadpass-exam-tfstate-585445411780`). If you're reproducing this in a different account, update that value with the output of `terraform output tfstate_bucket_name`.
 
 **Why this first?** Terraform state files must never be committed to git. The S3 backend with DynamoDB locking prevents concurrent applies from corrupting state — a critical operational requirement in any team environment.
 
@@ -117,7 +119,27 @@ This creates the full 172.16.0.0/16 network: 8 subnets across 2 AZs, IGW, 2 NAT 
 
 ---
 
-### Step 3 — Build the AMI with Packer
+### Step 3 — Deploy the GitHub OIDC Provider
+
+```bash
+cd terraform/live/staging/github-oidc
+terragrunt init
+terragrunt apply
+```
+
+This creates the IAM OIDC provider for `token.actions.githubusercontent.com` and the `github-oidc-eks-deploy` role trusted by GitHub Actions. The trust policy is scoped to `repo:technoe/roadpass-exam:*` — no other repository can assume this role.
+
+After applying, add one secret to the GitHub repository's **`staging` environment** (Settings → Environments → staging → Environment secrets):
+
+```
+AWS_ACCOUNT_ID = <your account ID>
+```
+
+The workflow declares `environment: staging`, which is what makes GitHub inject this secret. A repo-level secret would not be available to environment-scoped jobs.
+
+---
+
+### Step 4 — Build the AMI with Packer
 
 ```bash
 cd packer
@@ -143,7 +165,9 @@ This is an immutable infrastructure pattern for AMI-based deployments:
 
 ---
 
-### Step 4 — Deploy the EC2 App Stack
+### Step 5 — Deploy the EC2 App Stack
+
+> **Note:** This step requires EC2 launch permissions. On a brand new AWS account, EC2 may be temporarily blocked pending identity verification. If `packer build` returns `Blocked: This account is currently blocked`, open a support case at the URL in the error message — resolution is typically within a few hours.
 
 ```bash
 cd terraform/live/staging/ec2-app
@@ -159,7 +183,7 @@ Then verify: `curl http://<alb_dns_name>/health` should return `healthy`.
 
 ---
 
-### Step 5 — Deploy the Billing Alarm
+### Step 6 — Deploy the Billing Alarm
 
 ```bash
 cd terraform/live/staging/billing-alarm
@@ -205,44 +229,13 @@ The workflow in `.github/workflows/deploy-helm.yml` deploys the Helm chart to a 
 
 ### One-time OIDC trust setup
 
-Before the workflow runs, an IAM OIDC provider and role must exist in your account. Add this to a Terraform config (e.g., a `github-oidc/` live stack):
+The IAM OIDC provider and role are managed by the `terraform/live/staging/github-oidc/` stack (see Step 3 in Deploy Order). After applying, set one secret in the GitHub **`staging` environment** (not a repo-level secret):
 
-```hcl
-resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-}
-
-resource "aws_iam_role" "github_oidc_eks" {
-  name = "github-oidc-eks-deploy"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        }
-        StringLike = {
-          # Scoped to main branch only — prevents PRs from triggering deploys
-          "token.actions.githubusercontent.com:sub" = "repo:<your-org>/roadpass-exam:ref:refs/heads/main"
-        }
-      }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "eks_read" {
-  role       = aws_iam_role.github_oidc_eks.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-}
+```
+AWS_ACCOUNT_ID = <your AWS account ID>
 ```
 
-Set `AWS_ACCOUNT_ID` as a GitHub repository secret (not a credential — just the account number for the role ARN).
+The workflow job declares `environment: staging`, which both injects the environment secret and changes the GitHub OIDC `sub` claim to `repo:technoe/roadpass-exam:environment:staging`. The trust policy uses a wildcard (`repo:technoe/roadpass-exam:*`) to match both environment-scoped and branch-scoped jobs.
 
 ### How OIDC authentication works
 
