@@ -30,6 +30,7 @@ jobs:
   deploy:
     name: Helm deploy to staging
     runs-on: ubuntu-latest
+    environment: staging
 
     steps:
       - name: Checkout repository
