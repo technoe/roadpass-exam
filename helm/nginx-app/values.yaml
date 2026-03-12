@@ -1,0 +1,39 @@
+# Default values for nginx-app.
+# Override per environment using -f <env-values.yaml> or --set key=value.
+
+replicaCount: 2
+
+image:
+  repository: nginx
+  tag: stable-alpine
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  # Set to "nginx" for nginx ingress controller, or "alb" for AWS ALB controller
+  className: nginx
+  host: nginx-app.staging.example.com
+  annotations:
+    # Uncomment for nginx ingress controller:
+    # kubernetes.io/ingress.class: nginx
+    # Uncomment for AWS ALB ingress controller:
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Pod disruption budget — keep at least 1 pod running during deploys
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

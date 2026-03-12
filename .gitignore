@@ -1,0 +1,44 @@
+# Claude
+CLAUDE.md
+
+# Python virtualenv (Ansible)
+pyvenv.cfg
+packer/bin/
+packer/lib/
+packer/include/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+errored.tfstate
+terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+
+# Terragrunt
+.terragrunt-cache/
+
+# Packer build artifacts
+packer/manifest.json
+packer-manifest.json
+
+# AWS credentials / secrets (never commit these)
+*.pem
+*.key
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp

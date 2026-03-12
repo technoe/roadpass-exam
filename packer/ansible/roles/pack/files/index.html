@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadpass Exam — nginx</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 80px auto; text-align: center; color: #333; }
+    h1   { color: #0066cc; }
+    p    { color: #555; }
+    .env { font-family: monospace; background: #f4f4f4; padding: 4px 8px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>nginx is running</h1>
+  <p>This static page was baked into the AMI during the <strong>pack</strong> phase.</p>
+  <p>Environment-specific config (server_name, etc.) was applied at launch by the <strong>fry</strong> phase via EC2 userdata.</p>
+  <p>Built with Packer + Ansible on Amazon Linux 2023.</p>
+</body>
+</html>

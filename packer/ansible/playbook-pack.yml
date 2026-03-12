@@ -1,0 +1,12 @@
+---
+# Pack playbook — runs at AMI build time via Packer.
+# Installs and configures nginx with a static page baked into the AMI.
+# The fry phase (userdata) will overlay environment-specific config at launch.
+
+- name: Pack nginx AMI
+  hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - pack
