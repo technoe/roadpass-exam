@@ -46,10 +46,12 @@ resource "aws_iam_role" "github_oidc_eks" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          # Scoped to main branch of this specific repo.
-          # Using StringLike so we can use a wildcard if needed; change to
-          # StringEquals for exact-match enforcement.
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
+          # Wildcard scoped to this repo only.
+          # When a job declares `environment:`, GitHub's sub claim becomes
+          # "repo:org/repo:environment:name" instead of "repo:org/repo:ref:refs/heads/main".
+          # The wildcard covers both push-triggered and environment-scoped jobs
+          # while still preventing any other repo from assuming this role.
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*"
         }
       }
     }]
