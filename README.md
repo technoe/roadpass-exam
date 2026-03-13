@@ -2,6 +2,14 @@
 
 This repository is my submission for the Roadpass Digital DevOps take-home exercise. It covers all three required sections — VPC infrastructure, a Packer/Ansible/Terraform EC2 application stack, and a Helm + GitHub Actions deployment pipeline — with additional attention to operational concerns that matter in a real engineering environment: remote state management, billing visibility, tagging strategy, and IAM least privilege.
 
+As this is just a demo environment, I didn't mind putting everything into a single repo. However, in practice, this is an anti-pattern. Ideally, I'd have a repo for managing the packer config that runs nightly or weekly at least. We could version the instance with the datetime. That would let us pick and choose versions of the packed image for future EC2 builds. 
+
+As for Helm, this is IMHO, the best way to package and manage containers at scale. Kubernetes won the war, and Helm is the flagship. As above, this should be in a separate repo. If you have a LOT of environments, like 20+, then you could bring in something like ArgoCD. However, if you have fewer than 10, then github actions worfklows will be more than enough.
+
+For next steps I would include logging and alerting. Central logging systems like Datadog are priceless. Alerting is all about reducing the time between action and feedback. The shorter the feedback loop, the faster the iteration. 
+
+Admittedly, most of this was written with Claude Code under my guidance. Fortunately, I have 20 years experience of building systems and managing workflows like these without so much as a random word generator... 
+
 ---
 
 ## Architecture Overview
@@ -235,7 +243,7 @@ The IAM OIDC provider and role are managed by the `terraform/live/staging/github
 AWS_ACCOUNT_ID = <your AWS account ID>
 ```
 
-The workflow job declares `environment: staging`, which both injects the environment secret and changes the GitHub OIDC `sub` claim to `repo:technoe/roadpass-exam:environment:staging`. The trust policy uses a wildcard (`repo:technoe/roadpass-exam:*`) to match both environment-scoped and branch-scoped jobs.
+The workflow job declares `environment: staging`, which both injects the environment variable and changes the GitHub OIDC `sub` claim to `repo:technoe/roadpass-exam:environment:staging`. The trust policy uses a wildcard (`repo:technoe/roadpass-exam:*`) to match both environment-scoped and branch-scoped jobs. Using separate accounts for each environment reduces the chance that we'll accidentally deploy to the wrong environment and reduces the damage that can be done should only the testing/uat environment credentials become compromised. I created an AWS account to verify the OIDC authorziation config. You can see the OIDC step in the github actions workflow. 
 
 ### How OIDC authentication works
 
